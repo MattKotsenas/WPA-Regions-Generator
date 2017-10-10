@@ -170,6 +170,8 @@ Begin
     </Instrumentation>
 </InstrumentationManifest>
 "@
+
+    $clonedMeasures = @()
 }
 
 Process
@@ -177,7 +179,9 @@ Process
     # Generate the "Event" GUID
     foreach ($measure in $Measures)
     {
-        $measure.Guid = (Format-Guid)
+        $clonedMeasure = $measure.Clone()
+        $clonedMeasure.Guid = (Format-Guid)
+        $clonedMeasures += $clonedMeasure
     }
 }
 
@@ -189,7 +193,7 @@ End
         # allow two regions with the same GUID to be in the same file
         $doc = $template.Clone()
 
-        foreach ($measure in $Measures)
+        foreach ($measure in $clonedMeasures)
         {
             $region = [xml]@"
 <Region Guid=`"$($measure.Guid)`" Name=`"$($measure.Name)`">
