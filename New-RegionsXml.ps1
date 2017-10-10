@@ -69,102 +69,98 @@ param
     )
 )
 
-Set-StrictMode -Version 2
-$ErrorActionPreference = "Stop"
-
-<#
-.SYNOPSIS
-WPA requires all GUIDs to be wrapped in curly-braces, so centralize creating and formatting GUIDs.
-#>
-function Format-Guid
+Begin
 {
-    param
-    (
-        [Parameter(Mandatory = $false, ValueFromPipeline = $true)]
-        [Guid]
-        $Guid = [Guid]::NewGuid()
-    )
-    Set-StrictMode -Version 2
-    $ErrorActionPreference = "Stop"
-
-    return "{" + $Guid + "}"
-}
-
-<#
-.SYNOPSIS
-Pretty-print XML.
-#>
-function Write-Xml
-{
-    param
-    (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [Xml.XmlDocument]
-        $Document,
-
-        [Parameter(Mandatory = $true)]
-        [string]
-        $Path
-    )
-
-    Set-StrictMode -Version 2
-    $ErrorActionPreference = "Stop"
-
-    $settings = New-Object Xml.XmlWriterSettings
-    $settings.OmitXmlDeclaration = $false
-    $settings.Indent = $true
-    $settings.NewLineOnAttributes = $false
-
-    $writer = $null
-    try
+    <#
+    .SYNOPSIS
+    WPA requires all GUIDs to be wrapped in curly-braces, so centralize creating and formatting GUIDs.
+    #>
+    function Format-Guid
     {
-        $writer = [Xml.XmlWriter]::Create($Path, $settings)
-        $Document.Save($writer)
+        param
+        (
+            [Parameter(Mandatory = $false, ValueFromPipeline = $true)]
+            [Guid]
+            $Guid = [Guid]::NewGuid()
+        )
+        Set-StrictMode -Version 2
+        $ErrorActionPreference = "Stop"
+
+        return "{" + $Guid + "}"
     }
-    finally
+
+    <#
+    .SYNOPSIS
+    Pretty-print XML.
+    #>
+    function Write-Xml
     {
-        if ($writer -ne $null)
+        param
+        (
+            [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+            [Xml.XmlDocument]
+            $Document,
+
+            [Parameter(Mandatory = $true)]
+            [string]
+            $Path
+        )
+
+        Set-StrictMode -Version 2
+        $ErrorActionPreference = "Stop"
+
+        $settings = New-Object Xml.XmlWriterSettings
+        $settings.OmitXmlDeclaration = $false
+        $settings.Indent = $true
+        $settings.NewLineOnAttributes = $false
+
+        $writer = $null
+        try
         {
-            $writer.Dispose()
+            $writer = [Xml.XmlWriter]::Create($Path, $settings)
+            $Document.Save($writer)
+        }
+        finally
+        {
+            if ($writer -ne $null)
+            {
+                $writer.Dispose()
+            }
         }
     }
-}
 
-<#
-.SYNOPSIS
-Instead of using the verbose CreateElement() and SetAttribute() APIs, allow creating XML snippets in PowerShell, then importing them into a document.
-#>
-function Append-Element
-{
-    param
-    (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [Xml.XmlDocument]
-        $Document,
+    <#
+    .SYNOPSIS
+    Instead of using the verbose CreateElement() and SetAttribute() APIs, allow creating XML snippets in PowerShell, then importing them into a document.
+    #>
+    function Append-Element
+    {
+        param
+        (
+            [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+            [Xml.XmlDocument]
+            $Document,
 
-        [Parameter(Mandatory = $true)]
-        [string]
-        $XPath,
+            [Parameter(Mandatory = $true)]
+            [string]
+            $XPath,
 
-        [Parameter(Mandatory = $true)]
-        [Xml.XmlElement]
-        $Child
-    )
+            [Parameter(Mandatory = $true)]
+            [Xml.XmlElement]
+            $Child
+        )
+
+        Set-StrictMode -Version 2
+        $ErrorActionPreference = "Stop"
+
+        $Document.DocumentElement.SelectSingleNode($XPath).AppendChild($Document.ImportNode($Child, $true))
+    }
 
     Set-StrictMode -Version 2
     $ErrorActionPreference = "Stop"
 
-    $Document.DocumentElement.SelectSingleNode($XPath).AppendChild($Document.ImportNode($Child, $true))
-}
-
-# Generate the "Event" GUID
-foreach ($measure in $Measures)
-{
-    $measure.Guid = (Format-Guid)
-}
-
-# Generate a root Regions document
-$template = [xml]@"
+    # Generate a root Regions document
+    $template = [xml]@"
 <?xml version='1.0' encoding='utf-8' standalone='yes'?>
 <InstrumentationManifest>
     <Instrumentation>
@@ -174,16 +170,28 @@ $template = [xml]@"
     </Instrumentation>
 </InstrumentationManifest>
 "@
+}
 
-foreach ($provider in $EventProviders)
+Process
 {
-    # Create a Regions file per provider because we want regions with the same name to have the same GUID, but WPA does not
-    # allow two regions with the same GUID to be in the same file
-    $doc = $template.Clone()
-
+    # Generate the "Event" GUID
     foreach ($measure in $Measures)
     {
-        $region = [xml]@"
+        $measure.Guid = (Format-Guid)
+    }
+}
+
+End
+{
+    foreach ($provider in $EventProviders)
+    {
+        # Create a Regions file per provider because we want regions with the same name to have the same GUID, but WPA does not
+        # allow two regions with the same GUID to be in the same file
+        $doc = $template.Clone()
+
+        foreach ($measure in $Measures)
+        {
+            $region = [xml]@"
 <Region Guid=`"$($measure.Guid)`" Name=`"$($measure.Name)`">
     <Match>
         <Event TID=`"true`" PID=`"true`" />
@@ -198,8 +206,9 @@ foreach ($provider in $EventProviders)
     </Stop>
 </Region>
 "@
-        $doc | Append-Element -XPath "//RegionRoot" -Child $region.Region
-    }
+            $doc | Append-Element -XPath "//RegionRoot" -Child $region.Region
+        }
 
-    $doc | Write-Xml -Path (Join-Path -Path $Path -ChildPath "$RootName.$($provider.Name).xml")
+        $doc | Write-Xml -Path (Join-Path -Path $Path -ChildPath "$RootName.$($provider.Name).xml")
+    }
 }
